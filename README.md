@@ -23,9 +23,9 @@ These scripts were written in *[please fill in]*.
 
 ## Authors
 
-- Author 1 [contact](name@domain.ac.uk)
-- Author 2 [contact](name@domain.ac.uk)
-- Author 3 [contact](name@domain.ac.uk)
+- Author 1 - [contact](name@domain.ac.uk)
+- Author 2 - [contact](name@domain.ac.uk)
+- Author 3 - [contact](name@domain.ac.uk)
 
 ## License
 
