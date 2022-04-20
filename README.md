@@ -10,7 +10,7 @@
 
 ## Data sources
 
-This analysis used the following data:
+This analysis used the following data: *[please fill in]*
 
 - Data source 1
 - Data source 2
@@ -23,7 +23,9 @@ These scripts were written in *[please fill in]*.
 
 ## Authors
 
-Please include authors and contact details.
+- Author 1 [contact](name@domain.ac.uk)
+- Author 2 [contact](name@domain.ac.uk)
+- Author 3 [contact](name@domain.ac.uk)
 
 ## License
 
