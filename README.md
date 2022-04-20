@@ -1,2 +1,30 @@
-# NDL_CYPMH_Grampian
-Analysis by NDL Grampian on prescribing patterns of mental health medications and referrals to CAMHS
+<img src="ndlbanner.png" width="405" height="96">
+
+# Networked Data Lab: NDL Grampian analysis on *[please fill in]*
+
+#### Project Status: Completed
+
+## Project Description
+
+- This Networked Data Lab analysis by the NDL lab in Grampian focusses on *[please fill in]*.
+
+## Data sources
+
+This analysis used the following data:
+
+- Data source 1
+- Data source 2
+- [External data source 1](www.google.com)
+- [External data source 2](www.google.com)
+
+## Requirements
+
+These scripts were written in *[please fill in]*.
+
+## Authors
+
+Please include authors and contact details.
+
+## License
+
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
