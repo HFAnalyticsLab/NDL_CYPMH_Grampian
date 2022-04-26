@@ -31,8 +31,8 @@ A short description of what each code does, and what each file is. *[please fill
 
 ## Authors
 
-- [Will Ball](wpball.com) - [email](william.ball@abdn.ac.uk) | [GitHub](github.com/will-ball) | [Twitter](twitter.com/WillBall12)
-- [Jess Butler](www.abdn.ac.uk/people/jessicabutler/) - [email](jessicabutler@abdn.ac.uk) | [GitHub](https://github.com/JessButler) | [Twitter](twitter.com/JessButler284)
+- [Will Ball](https://wpball.com) - [email](mailto:william.ball@abdn.ac.uk) | [GitHub](https://www.github.com/will-ball) | [Twitter](https://www.twitter.com/WillBall12)
+- [Jess Butler](https://www.abdn.ac.uk/people/jessicabutler/) - [email](mailto:jessicabutler@abdn.ac.uk) | [GitHub](https://github.com/JessButler) | [Twitter](https://www.twitter.com/JessButler284)
 
 ## License
 
