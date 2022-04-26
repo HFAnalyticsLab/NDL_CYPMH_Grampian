@@ -1,4 +1,4 @@
-<img src="ndlbanner.png" width="31%"> <img src="achds logo.jpg" width="31%"> <img src="nhsg-branding.jpg" width="31%">
+<img src="ndlbanner.png" width="32%"> <img src="achds logo.jpg" width="32%"> <img src="nhsg-branding.jpg" width="32%">
 
 # Networked Data Lab: NDL Grampian analysis on mental health prescribing and CAMHS referrals
 
