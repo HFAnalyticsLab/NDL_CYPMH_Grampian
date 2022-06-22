@@ -33,6 +33,10 @@ This analysis used the following data:
 
 All script files used for analysis and visualisation were produced using R (version 4.0.3) in RStudio (version 1.4.1103).
 
+## Find out more
+
+Further results from this project are available as a preprint academic article which can be accessed [here](https://www.medrxiv.org/content/10.1101/2022.06.14.22276082v1). Code related to this preprint can also be found in [this associated github repository](https://github.com/AbdnCHDS/NDL_prescribing_referrals_paper).
+
 ## Authors
 
 - [Will Ball](https://wpball.com) - [email](mailto:william.ball@abdn.ac.uk) | [GitHub](https://www.github.com/will-ball) | [Twitter](https://www.twitter.com/WillBall12)
