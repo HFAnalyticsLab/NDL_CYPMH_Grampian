@@ -29,7 +29,7 @@ This analysis used the following data:
 - Summary data and script files for cleaning and analysis of prescribing and referrals data are found in the [Codes folder](https://github.com/HFAnalyticsLab/NDL_CYPMH_Grampian/tree/main/Codes)
 - A summary of the main results of this analysis can be found in the [Report folder](https://github.com/HFAnalyticsLab/NDL_CYPMH_Grampian/tree/main/Report) which contains a written summary and powerpoint presentations.
 
-### Requirements
+#### Requirements
 
 All script files used for analysis and visualisation were produced using R (version 4.0.3) in RStudio (version 1.4.1103).
 
@@ -42,7 +42,7 @@ Further results from this project are available as a preprint academic article w
 - [Will Ball](https://wpball.com) - [email](mailto:william.ball@abdn.ac.uk) | [GitHub](https://www.github.com/will-ball) | [Twitter](https://www.twitter.com/WillBall12)
 - [Jess Butler](https://www.abdn.ac.uk/people/jessicabutler/) - [email](mailto:jessicabutler@abdn.ac.uk) | [GitHub](https://github.com/JessButler) | [Twitter](https://www.twitter.com/JessButler284)
 
-### Acknowledgements
+## Acknowledgements
 
 We thank the Health Foundation for providing financial support for this work and the Networked Data Lab group particularly for feedback on planning, analysis and presentation of results. The data used here was collected during the course of healthcare delivery within NHS Grampian and we thank the staff and patients involved. We also thank staff at Grampian Data Safe Haven (DaSH) for processing and making it available for analysis. We are grateful to members of the Aberdeen Centre for Health Data Science Public Involvement group for providing their thoughts on the planning of this project, early reactions to results and interpretations.
 
