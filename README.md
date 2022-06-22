@@ -17,7 +17,7 @@ This analysis used the following data:
 - NHS Grampian subset of the [Prescribing Information System](https://www.isdscotland.org/Health-Topics/Prescribing-and-Medicines/Prescribing-Datamarts/#pis). This is a record of every prescription made or dispensed in the community (i.e. outside of hospitals).
 - NHS Grampian CAMHS referrals. Records on referrals inform national reporting of [CAMHS waiting times](https://publichealthscotland.scot/publications/child-and-adolescent-mental-health-services-camhs-waiting-times/child-and-adolescent-mental-health-services-camhs-waiting-times-quarter-ending-31-december-2021/).
 - [Scottish Index of Multiple Deprivation 2020 v2](https://www.gov.scot/collections/scottish-index-of-multiple-deprivation-2020/). Linked to place of residence via postcode.
-- [Mid-year Populaation Estimates](https://www.nrscotland.gov.uk/statistics-and-data/statistics/statistics-by-theme/population/population-estimates/2011-based-special-area-population-estimates/population-estimates-by-simd-2016). Officially produced by the National Records of Scotland and broken down by age, sex and SIMD for the calculation of rates.
+- [Mid-year Population Estimates](https://www.nrscotland.gov.uk/statistics-and-data/statistics/statistics-by-theme/population/population-estimates/2011-based-special-area-population-estimates/population-estimates-by-simd-2016). Officially produced by the National Records of Scotland and broken down by age, sex and SIMD for the calculation of rates.
 
 ## How does it work?
 
