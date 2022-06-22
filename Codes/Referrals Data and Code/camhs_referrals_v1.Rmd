@@ -1,0 +1,704 @@
+# Setup
+```{r setup, warning = F, message = F}
+library(tidyverse) # General use & plotting etc
+library(lubridate) # date functions
+library(data.table) # for faster functions
+library(scales) # for figures
+
+knitr::opts_chunk$set(echo = TRUE)
+
+theme_set(theme_bw())
+theme_update(
+  axis.title = element_text(size = 12),
+  strip.background = element_rect(fill = "white"),
+  strip.text = element_text(size = 12),
+  panel.grid = element_line(colour = "gray95"),
+  legend.position = "none")
+
+options(scipen = 999)
+
+.libPaths("H:/DaSH477/Methods/R Libraries")
+```
+
+# Data
+```{r data}
+# from Will's prep
+# load data and add a few columns
+# this should be moved to the cleaning file
+camhs_joined <- 
+  fread("H:/DaSH477/Data/Cleaned Data/Jess/camhs_joined.csv", 
+        sep = ",") %>%
+  mutate(school_ages = case_when(
+    age_at_referral >= 0  &  age_at_referral <= 4    ~ "Pre-Schoolers",
+    age_at_referral >= 5  &  age_at_referral <= 7    ~ "Lower Primary",
+    age_at_referral >= 8  &  age_at_referral <= 11   ~ "Upper Primary",
+    age_at_referral >= 12 & age_at_referral  <= 14   ~ "Lower Secondary",
+    age_at_referral >= 15 & age_at_referral  <= 18   ~ "Upper Secondary"),
+        school_ages = ordered(school_ages, 
+              levels = c("Pre-Schoolers", "Lower Primary", "Upper Primary", "Lower Secondary", "Upper Secondary", "School Leavers")),
+         year = year(referred_date),
+         half_year = floor_date(referred_date, "halfyear"),
+         quarter = floor_date(referred_date, "quarter"),
+         bimonth = floor_date(referred_date, "bimonth"),
+         month_year = floor_date(referred_date, "month"),
+         sex = if_else(sex == "U", NA_character_, as.character(sex)))
+
+#create df that is one row per referral (remove rows for visits from one referral)
+camhs_referrals <-
+  camhs_joined %>%
+  group_by(dash_uid, referred_date) %>%
+  slice_head() %>% 
+  ungroup()
+
+#if they get an appointment say their referral was accepted
+camhs_referrals <-
+  camhs_referrals %>%
+  mutate(rejected_referral = 
+           ifelse(!is.na(appointment_date), 
+                  2, 
+                  rejected_referral))
+
+#add referral count
+camhs_referrals <-
+  camhs_referrals %>%
+  group_by(dash_uid) %>%
+  arrange(referred_date) %>%
+  mutate(referral_number = row_number()) %>%
+  ungroup()
+
+
+rm(camhs_joined)
+
+#Grampian total population numbers (Will's)
+population_data <- read_csv("cleaned_pop_simd_2012-2020.csv")
+
+#Calculate mean population per SIMD decile
+#for the years 2015 - 2020
+population_by_simd <-
+  population_data %>%
+  filter(age %in% c(2:17)) %>%
+  filter(year >= 2015) %>%
+  group_by(year, decile) %>%
+  summarise(pop = sum(count),
+            .groups = "drop") %>%
+  group_by(decile) %>%
+  summarise(mean_pop = mean(pop))
+```
+
+
+#Cohort
+```{r cohort}
+#limit cohort date range, age, completeness
+camhs_referrals <-
+  camhs_referrals %>%
+  filter(!is.na(sex)) %>%  # Small numbers
+  filter(!is.na(year)) %>% # NA referred dates
+  filter(age_at_referral <= 17) %>% #Small numbers
+  filter(age_at_referral >= 2) %>% #Small numbers
+  filter(year >= 2015) #trim to 5 years before COVID
+```
+
+# Age referrals
+```{r refs by age}
+referrals_by_age <-
+camhs_referrals %>%
+  group_by(age_at_referral) %>%
+  summarise(referrals = n(),
+            people = n_distinct(dash_uid)) %>%
+  write_csv("referrals_by_age.csv")
+
+#Figure 1
+referrals_by_age %>%
+  ggplot(aes(age_at_referral, referrals)) +
+  geom_col() +
+  labs(x = "Age", y = "Referrals (2015-2021)\n") +
+  scale_x_continuous(breaks = c(2:17)) +
+  scale_y_continuous(breaks = seq(from = 0, to = 3000, by = 500)) +
+  theme(legend.position = "none")
+```
+
+# Age+sex referrals
+```{r refs by age sex}
+referrals_by_age_sex <-
+camhs_referrals %>%
+  group_by(age_at_referral, sex) %>%
+  summarise(referrals = n(),
+            people = n_distinct(dash_uid),
+            .groups = "drop") %>%
+  write_csv("referrals_by_age_sex.csv")
+
+#Figure 2
+referrals_by_age_sex %>%
+  ggplot(aes(age_at_referral, referrals, fill = sex)) +
+  geom_col(position = "dodge", width = 0.75) +
+  facet_wrap(~sex) +
+  labs(x = "Age", y = "Referrals (2015-2021)\n") +
+  scale_x_continuous(breaks = c(2:17)) +
+  theme(strip.text = element_blank())
+
+#Figure 3
+referrals_by_age_sex %>%
+  ggplot(aes(age_at_referral, referrals, fill = sex)) +
+  geom_col(position = "dodge") +
+  labs(x = "Age", y = "Referrals (2015-2021)\n") +
+  scale_x_continuous(breaks = c(2:17)) 
+```
+
+# SIMD referrals
+```{r refs by simd}
+referrals_by_simd <-
+  camhs_referrals %>%
+  group_by(simd2020_decile) %>%
+  summarise(total_referrals = n(),
+            people = n_distinct(dash_uid)) %>%
+  left_join(., population_by_simd, 
+            by = c("simd2020_decile" = "decile")) %>%
+  mutate(refs_per_100 = total_referrals / mean_pop * 100) %>%
+  write_csv("referrals_by_simd.csv")
+
+#Figure 4
+referrals_by_simd %>%
+  ggplot(aes(simd2020_decile, refs_per_100)) +
+  geom_point(size = 2, color = "darkgreen") +
+  geom_line(size = 1, color = "darkgreen") +
+  scale_x_reverse(breaks = c(1:10),
+                     labels = 
+                       c("most\ndeprived 10% of\nScotland", 
+                         "","","","","","","","",
+                         "least\ndeprived 10% of\nScotland")) +
+  scale_y_continuous(breaks = c(0, 5, 10, 15, 20, 25, 30),
+                     limits = c(0, NA)) +
+  labs(x = "Deprivation level of home area", 
+       y = "Referrals (2015-2021)\n per 100 children\n") 
+```
+
+
+# SIMD+age first referral
+```{r refs by simd age}
+first_referral_by_age_simd <-
+camhs_referrals %>%
+  filter(referral_number == 1) %>%
+  group_by(simd2020_decile) %>%
+  summarise(mean_age = mean(age_at_referral),
+           .groups = "drop") %>%
+  write_csv("referral_by_simd_age.csv")
+
+#Figure 6
+first_referral_by_age_simd %>%
+  ggplot(aes(simd2020_decile, mean_age)) +
+  geom_point(size = 2, color = "darkgreen") +
+  geom_line(size = 1, color = "darkgreen") +
+  ylim(c(8, 12)) +
+  scale_x_reverse(breaks = c(1:10),
+                     labels = 
+                       c("most\ndeprived 10% of\nScotland", 
+                         "","","","","","","","",
+                         "least\ndeprived 10% of\nScotland")) +
+  labs(x = "Deprivation level of home area",
+       y = "Age at First Referral (mean)\n")
+```
+
+# Time referrals
+```{r refs by quarter}
+referrals_per_quarter <-
+camhs_referrals %>%
+  filter(month_year != ymd("2021-10-01")) %>% #remove due to quarters
+  group_by(quarter) %>%
+  summarise(total_referrals = n(),
+            people = n_distinct(dash_uid)) %>%
+  write_csv("referrals_by_quarter.csv")
+
+referrals_per_quarter %>%
+  ggplot(aes(quarter, total_referrals)) +
+  geom_line(size = 1, color = "darkblue") +
+  geom_point(size = 1.5, color = "darkblue") +
+  ylim(0, NA) +
+  labs(x = "", y = "Referrals per quarter\n") +
+  scale_x_date(breaks = date_breaks("year"),
+               labels = date_format("%Y")) +
+  theme(axis.text = element_text(size = 12),
+        plot.margin = unit(c(0,0.5,0,0), unit = "cm"))
+```
+
+# Covid change
+```{r refs covid change}
+#mean referrals before March 2020
+referrals_per_quarter %>%
+  filter(quarter < ymd("2020-03-01")) %>%
+  summarise(mean = mean(total_referrals))
+
+#mean referrals from October 2020 
+referrals_per_quarter %>%
+  filter(quarter >= ymd("2020-10-01")) %>%
+  summarise(mean = mean(total_referrals))
+
+#rise in refs after first lockdown
+(932-796)/796
+```
+
+#Time+school referrals
+```{r refs by quarter school}
+referral_by_quarter_school <-
+  camhs_referrals %>%
+  filter(referred_date < ymd("2021-10-01")) %>%
+  group_by(quarter, school_ages) %>%
+  summarise(total_referrals = n(),
+            people = n_distinct(dash_uid),
+            .groups = "drop") %>%
+  write_csv("referrals_by_quarter_school.csv")
+
+#Figure
+referral_by_quarter_school %>%
+  filter(school_ages == "Pre-Schoolers") %>%
+  ggplot(aes(quarter, total_referrals)) +
+  geom_point(alpha = 0.2, color = "red") +
+  geom_smooth(
+    se = F, size = 1.5, color = "red", span = 1) +
+  ylim(0, NA) +
+  facet_wrap(~school_ages, scales = "fixed", nrow = 1) +
+  scale_x_date(breaks = date_breaks("year"),
+               labels = date_format("%Y")) +
+  labs(x = "", y = "Referrals Per Quarter\n") 
+```
+
+#Time+school2 referrals
+```{r refs by quarter school 2, fig.width=10, fig.height=4}
+#Figure
+referral_by_quarter_school %>%
+  ggplot(aes(quarter, total_referrals, color = school_ages)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(se = F, size = 1.5, span = 1) +
+  ylim(0, 400) +
+  facet_wrap(~school_ages, scales = "fixed", nrow = 1) +
+  scale_color_discrete() +
+  labs(x = "", y = "Referrals Per Quarter\n") 
+```
+
+
+```{r refs by quarter school sex, fig.width=10, fig.height=4}
+referral_by_halfyear_school_sex <-
+  camhs_referrals %>%
+  filter(referred_date < ymd("2021-07-01")) %>%
+  group_by(half_year, school_ages, sex) %>%
+  summarise(total_referrals = n(),
+            people = n_distinct(dash_uid),
+            .groups = "drop") %>%
+  
+  write_csv("referrals_by_halfyear_school_sex.csv")
+
+referral_by_halfyear_school_sex %>%
+  ggplot(aes(half_year, total_referrals, color = sex)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(se = F, size = 1.5, span = 2) +
+  facet_wrap(~school_ages, scales = "fixed", nrow = 1) +
+  scale_color_discrete() +
+  labs(x = "", y = "Referrals Per 6-months\n")
+```
+
+#SIMD+time referrals
+```{r, fig.width=8, fig.height=4}
+population_data <-
+  population_data %>%
+  mutate(quintile = case_when(decile %in% c(1, 2) ~ 1,
+                              decile %in% c(3, 4) ~ 2,
+                              decile %in% c(5, 6) ~ 3,
+                              decile %in% c(7, 8) ~ 4,
+                              decile %in% c(9, 10) ~ 5)) 
+
+pop_year_quintile <-
+  population_data %>%
+  group_by(year, quintile) %>%
+  summarise(population = sum(count),
+            .groups = "drop")
+
+pop_year_quintile <-
+bind_rows(pop_year_quintile,
+          data_frame(
+            year = c(2021, 2021, 2021, 2021, 2021),
+            quintile = c(1:5),
+            population = c(8938, 24089, 32380, 45932, 46943)
+          ))
+
+referrals_by_simd_year <-
+camhs_referrals %>%
+  group_by(year, simd2020_quintile) %>%
+  summarise(referrals = n(),
+            .groups = "drop") %>%
+  left_join(., pop_year_quintile,
+            by = c("year" = "year",
+                   "simd2020_quintile" = "quintile")) %>%
+  mutate(ref_rate_per_100 = referrals/population * 100) %>%
+  write_csv("referrals_by_simd_year.csv")
+
+labels <- 
+  c("1" = "Most deprived 20%", "2" = "", "3" = "", "4" = "", "5" = "Least deprived 20%")
+
+referrals_by_simd_year %>%
+  filter(year <= 2020) %>%
+  ggplot(aes(year, ref_rate_per_100, 
+             group = simd2020_quintile, color = simd2020_quintile)) +
+  geom_point(size = 2) +
+  geom_line(size = 1.5, alpha = 0.5) +
+  facet_wrap(~simd2020_quintile, ncol = 5,
+             labeller = labeller(
+               simd2020_quintile = labels)) +
+  labs(y = "Referrals per 100 people\n") +
+  theme(strip.text = element_text(size = 10)) +
+  scale_x_continuous(breaks = c(2016, 2018, 2020)) +
+  scale_y_continuous(limits = c(0, NA))
+```
+
+#Time rejections
+```{r}
+rejections_month <-
+  camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>% #recent referrals na
+  group_by(month_year) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejected = n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals) %>%
+  write_csv("rejections_by_month.csv")
+
+
+#Figure
+rejections_month %>%
+  ggplot(aes(month_year, proportion_rejected)) +
+  geom_point(alpha = 0.4, color = "darkred") +
+  geom_smooth(se = F, size = 1.5, color = "darkred") +
+  labs(x = "", y = "Referrals Rejected\n") +
+  scale_x_date(breaks = date_breaks("year"),
+               labels = date_format("%Y")) +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), limits = c(0, 0.4)) 
+
+#Table
+camhs_referrals %>%
+  filter(referred_date <= ymd("2021-06-01")) %>%
+  group_by(year) %>%
+  summarise(total_referrals = n(),
+            referrals_month = total_referrals / 12, #fix 2021
+            total_rejections = sum(rejected_referral == 1, na.rm = T),
+            prop_rejected = total_rejections / total_referrals) 
+```
+
+# Time+sex rejections
+```{r}
+rejections_by_quarter_sex <-
+  camhs_referrals %>%
+  filter(quarter <= ymd("2021-06-01")) %>%
+  group_by(quarter, sex) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejected = n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals,
+    .groups = "drop") %>%
+  write_csv("rejections_by_quarter_sex.csv")
+
+
+rejections_by_quarter_sex %>%
+  ggplot(aes(quarter, proportion_rejected, color = sex)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(se = F, size = 1.5) +
+  labs(x = "", y = "Referrals Rejected\n") +
+  theme(legend.position = "none") +
+  scale_x_date(breaks = date_breaks("year"),
+               labels = date_format("%Y")) +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), limits = c(0, 0.5)) 
+```
+
+# Age+sex rejections
+```{r, fig.width=6}
+rejections_by_age_sex <-
+  camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>% #recent referrals na 
+  filter(age_at_referral > 2) %>% #smallish numbers
+  group_by(sex, age_at_referral) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejectd = 
+      n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals,
+    .groups = "drop") %>%
+  write_csv("rejections_by_age_sex.csv")
+
+#Figure
+rejections_by_age_sex %>%
+  ggplot(aes(age_at_referral, proportion_rejected, fill = sex)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~sex) +
+  labs(x = "Age", y = "Referrals Rejected\n(2015-2021)\n") +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), 
+                     limits = c(0, 0.4)) +
+  scale_x_continuous(breaks = c(3:17)) +
+  theme(strip.text = element_blank())
+```
+
+```{r}
+#Figure
+rejections_by_age_sex %>%
+  ggplot(aes(age_at_referral, proportion_rejected, fill = sex)) +
+  geom_col(position = "dodge") +
+  labs(x = "Age", y = "Referrals Rejected\n(2015-2021)\n") +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), 
+                     limits = c(0, 0.4)) +
+  scale_x_continuous(breaks = c(3:17)) 
+```
+
+# SIMD rejections
+```{r}
+rejections_by_simd <-
+  camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>% #recent referrals na
+  group_by(simd2020_decile) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejected = 
+      n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals) %>%
+  write_csv("rejections_by_simd.csv")
+
+#Figure
+rejections_by_simd %>%
+  ggplot(aes(simd2020_decile, proportion_rejected)) +
+  geom_point(size = 2, color = "darkgreen") +
+  geom_line(size = 1, color = "darkgreen") +
+  labs(x = "Deprivation level of home area", y = "Referrals Rejected\n(2015-2021)\n") +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), 
+                     limits = c(0, .3)) +
+  scale_x_reverse(breaks = c(1:10),
+                     labels = 
+                       c("most\ndeprived 10% of\nScotland", 
+                         "","","","","","","","",
+                         "least\ndeprived 10% of\nScotland")) 
+```
+
+# SIMD+time rejections
+```{r, fig.width=8, fig.height=4}
+rejections_by_simd_year <-
+  camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>% #recent referrals na
+  group_by(year, simd2020_quintile) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejected = 
+      n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals) %>%
+  write_csv("rejections_by_simd_year.csv")
+
+rejections_by_simd_year %>%
+  ggplot(aes(year, proportion_rejected, 
+             group = simd2020_quintile, 
+             color = simd2020_quintile)) +
+  geom_point(size = 2) +
+  geom_line(size = 1.5, alpha = 0.5) +
+  facet_wrap(~simd2020_quintile, ncol = 5,
+             labeller = labeller(
+               simd2020_quintile = labels)) +
+  labs(y = "Rejection rate\n") +
+  theme(strip.text = element_text(size = 10)) +
+  scale_x_continuous(breaks = c(2016, 2018, 2020)) +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), 
+                     limits = c(0, .4)) 
+```
+
+
+
+# Time+school rejections
+```{r, fig.width=10, fig.height=4}
+rejections_by_halfyear_school <-
+  camhs_referrals %>%
+  filter(referred_date <= ymd("2021-06-01")) %>%
+  group_by(half_year, school_ages) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejected = 
+      n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals,
+    .groups = "drop") %>%
+  write_csv("rejections_by_halfyear_school.csv")
+
+rejections_by_halfyear_school %>%
+  ggplot(aes(half_year, proportion_rejected, color = school_ages)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(se = F, size = 1.5,
+              span = 2) +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), 
+                     limits = c(0, 0.75),
+                     breaks = c(0, 0.25, 0.5, 0.75)) +
+  facet_wrap(~school_ages, scales = "fixed", nrow = 1) +
+  scale_color_discrete() +
+  labs(x = "", y = "Referrals Rejected\n") 
+```
+
+#Time+school+sex rejections
+```{r, fig.width=10, fig.height=4}
+rejections_by_year_school_sex <-
+  camhs_referrals %>%
+  filter(referred_date < ymd("2021-07-01")) %>%
+  group_by(year, school_ages, sex) %>%
+  summarise(
+    total_referrals = n(),
+    total_rejected = sum(rejected_referral == 1, na.rm = T),
+    people_rejected = 
+      n_distinct(dash_uid[rejected_referral == 1]),
+    proportion_rejected = total_rejected / total_referrals,
+    .groups = "drop") %>%
+  mutate(total_rejected = 
+           ifelse(total_rejected < 5, NA, total_rejected),
+         proportion_rejected = 
+           ifelse(is.na(total_rejected), NA, proportion_rejected)) %>%
+  write_csv("rejections_by_year_school_sex.csv")
+
+#Figure
+rejections_by_year_school_sex %>%
+  ggplot(aes(year, proportion_rejected, color = sex)) +
+  geom_point(alpha = 0.4, size = 2) +
+  geom_smooth(se = F, size = 1.5, 
+              span = 2) +
+  scale_y_continuous(labels = percent_format(accuracy = 5L), 
+                     limits = c(0, NA),
+                     breaks = c(0, 0.25, 0.5, 0.75)) +
+  facet_wrap(~school_ages, scales = "fixed", nrow = 1) +
+  scale_color_discrete() +
+  labs(x = "", y = "Referrals Rejected\n") 
+```
+
+#Sex amplification
+```{r}
+girls_accepted_by_month_sex <-
+  camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>%
+  group_by(month_year) %>%
+  summarise(
+    referrals = n(),
+    accepted_referrals = sum(
+      rejected_referral == 2, na.rm = T),
+    accepted_referrals_girl = sum(
+      sex == "F" & rejected_referral == 2, na.rm = T),
+    people_accepted_girls = 
+      n_distinct(dash_uid[sex == "F" & rejected_referral == 2]),
+    prop_accepted_referrals_girls =
+      accepted_referrals_girl / accepted_referrals) %>%
+  write_csv("girls_accepted_by_month_sex.csv")
+
+girls_accepted_by_month_sex %>%
+  ggplot(aes(month_year, prop_accepted_referrals_girls)) +
+  geom_hline(yintercept = 0.5, color = "grey60") +
+  geom_point(
+    color = "#f8766d", size = 1.5, alpha = 0.3) +
+  geom_smooth(size = 1.5, span = 1, se = F, color = "#f8766d") +
+  labs(x = "", 
+       y = "Accepted referrals\n that are GIRLS\n") +
+  scale_x_date(breaks = date_breaks("year"),
+               labels = date_format("%Y")) +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 5L), 
+    limits = c(0.30, 0.70)) 
+```
+
+# Age amplification
+```{r}
+age_accepted_month <-
+camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>%
+  filter(rejected_referral == 2) %>%
+  group_by(month_year) %>%
+  summarise(mean_age = mean(age_at_referral)) %>%
+  write_csv("age_accepted_by_month.csv")
+
+age_accepted_month %>%
+  ggplot(aes(month_year, mean_age)) +
+  geom_point(alpha = 0.2, color = "darkgreen") +
+  geom_smooth(
+    se = F, size = 1.5, color = "#3d9954", span = 1) +
+  scale_x_date(breaks = date_breaks("year"),
+               labels = date_format("%Y")) +
+  scale_y_continuous(limits = c(10, 13.5)) +
+  labs(x = "", y = "Mean Age of\n Accepted Referrals\n") 
+```
+
+#SIMD steady
+```{r}
+simd_accepted_by_year <-
+  camhs_referrals %>%
+  filter(month_year <= ymd("2021-06-01")) %>%
+  group_by(year, simd2020_quintile) %>%
+  summarise(
+    referrals = n(),
+    accepted = 
+      sum(rejected_referral == 2, na.rm = T),
+    .groups = "drop") %>%
+  left_join(., pop_year_quintile,
+            by = c("year" = "year",
+            "simd2020_quintile" = "quintile")) %>%
+  mutate(accepted_rate = accepted / population * 100) %>%
+  write_csv("simd_accepted_by_year.csv")
+
+simd_accepted_by_year %>%
+  filter(simd2020_quintile %in% c(1, 5),
+         year <= 2020) %>%
+  ggplot(aes(year, accepted_rate, group = as_factor(simd2020_quintile), color = as_factor(simd2020_quintile))) +
+  geom_point(size = 1.5) +
+  geom_line(size = 1.5, alpha = 0.5) +
+  scale_y_continuous(limits = c(0, 2.5)) +
+  scale_color_manual(
+    labels = c("Most deprived", "Least deprived"),
+    values = c("navyblue", "cornflowerblue")) +
+  labs(y = "Accepted referrals\nper 100 people\n") +
+  theme(legend.position = "right",
+        legend.title = element_blank())
+```
+
+
+#Accepted Cohorts
+```{r}
+accepted_2016 <-
+  camhs_referrals %>%
+  filter(
+    referred_date >= ymd("2015-06-01"),
+    referred_date <= ymd("2016-05-31"),
+    rejected_referral == 2) %>%
+  group_by(dash_uid) %>%
+  arrange(referred_date) %>%
+  slice(1) %>%
+  mutate(cohort = 2016)
+
+accepted_2021 <-
+  camhs_referrals %>%
+  filter(
+    referred_date >= ymd("2020-06-01"),
+    referred_date <= ymd("2021-05-31"),
+    rejected_referral == 2) %>%
+  group_by(dash_uid) %>%
+  arrange(referred_date) %>%
+  slice(1) %>%
+  mutate(cohort = 2021)
+
+accepted <-
+  bind_rows(accepted_2016, accepted_2021)
+
+accepted %>%
+  group_by(cohort) %>%
+  summarise(people = n(),
+            med_age = median(age_at_referral),
+            iqr_age = IQR(age_at_referral),
+            prop_boys = sum(sex == "M")/people,
+            prop_deprived = sum(simd2020_quintile == 1)/people)
+```
+
+
+
+
+
+
+
+
+
+
+

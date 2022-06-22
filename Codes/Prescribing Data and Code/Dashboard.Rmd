@@ -1,0 +1,910 @@
+---
+title: "Grampian PIS"
+output:
+  flexdashboard::flex_dashboard:
+    theme:
+      version: 4
+      bootswatch: spacelab
+    orientation: columns
+    vertical_layout: fill
+    source_code: embed
+runtime: shiny
+resource_files:
+- Data/Shapefile/NHSG_bivariate.shp
+- Data/Shapefile/NHSG_bivariate.dbf
+- Data/Shapefile/NHSG_bivariate.prj
+- Data/Shapefile/NHSG_bivariate.shx
+---
+
+```{r global, include=FALSE}
+options(scipen = 999)
+
+library(flexdashboard)
+library(shiny)
+library(tidyverse)
+library(janitor)
+library(plotly)
+library(paletteer)
+library(cowplot)
+library(lubridate)
+library(rio)
+library(sf)
+library(biscale)
+library(here)
+library(ggpubr)
+library(metR)
+
+pis_data <- import_list(here("Data/PIS_dash_tables.xlsx"), setclass = "tbl")
+
+mh_data <- import_list(here("Data/PIS_mh_tables.xlsx"), setclass = "tbl")
+
+simd_pop <- import("Data/Population SIMD/cleaned_pop_simd_2012-2020.csv", delim = ",")
+
+annual_totals <- import("Data/PIS_mh_annual.csv") %>% 
+  rename(decile = "simd2020_decile")
+
+pop_year <- simd_pop %>% 
+  group_by(year) %>% 
+  summarise(pop_estimate = sum(count))
+
+dep_pop_annual <- simd_pop %>%
+  group_by(year, decile) %>% 
+  summarise(pop_estimate = sum(count))
+
+dep_pop_avg <- dep_pop_annual %>% 
+  group_by(decile) %>% 
+  summarise(mean_pop = round(mean(pop_estimate)))
+
+annual_individuals <- mh_data$`Annual Individuals by year` %>%
+  filter(year <= 2020) %>%
+  mutate(decile = simd2020_decile) %>% 
+  group_by(year, decile) %>% 
+  summarise(individuals = sum(n))
+
+annual_totals <- annual_totals %>% 
+  left_join(dep_pop_annual, by = c("decile", "year")) %>%
+  left_join(annual_individuals, by = c("decile", "year")) %>% 
+  mutate(rate = total / individuals,
+         rate_per_k = (total / individuals)*1000,
+         pop_rate = total / pop_estimate,
+         pop_rate_per_k = (total / pop_estimate)*1000,
+         proportion = (individuals / pop_estimate))
+
+mean_totals <- annual_totals %>% 
+  group_by(decile) %>% 
+  summarise(mean_total = mean(total),
+            mean_individuals = mean(individuals),
+            mean_pop_estimate = mean(pop_estimate),
+            mean_rate = mean_total/mean_individuals,
+            mean_rate_upper = (1 / mean_individuals) * (mean_total + (1.96 * sqrt(mean_total))),
+            mean_rate_lower = (1 / mean_individuals) * (mean_total - (1.96 * sqrt(mean_total))),
+            mean_rate_per_hundred = mean_rate*100,
+            mean_pop_rate = mean_total/mean_pop_estimate,
+            mean_pop_rate_upper = (1 / mean_pop_estimate) * (mean_total + (1.96 * sqrt(mean_total))),
+            mean_pop_rate_lower = (1 / mean_pop_estimate) * (mean_total - (1.96 * sqrt(mean_total))),
+            mean_pop_rate_per_hundred = mean_pop_rate*100,
+            mean_proportion = mean_individuals/mean_pop_estimate,
+            mean_proportion_upper =
+              mean_proportion + (1.96 * sqrt((mean_proportion * (1 - mean_proportion)) / mean_pop_estimate)),
+            mean_proportion_lower =
+              mean_proportion - (1.96 * sqrt((mean_proportion * (1 - mean_proportion)) / mean_pop_estimate)))
+
+sf_nhsg <- read_sf(file.path("Data/Shapefile", "NHSG_bivariate.shp"))
+```
+
+Cohort Summary
+=======================================================================
+
+Sidebar {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+### **Community Dispensed Prescription Data**
+
+This dashboard presents summarised prescription data related to the **NHS Grampian Children & Young People's Mental Health Cohort**.
+
+The records include prescriptions for a selection of medications commonly used to treat Mental Health conditions which have been dispensed in the community between 2014-2021 for people who meet the following criteria:
+
+- Live in NHS Grampian region
+- Aged 0-24 at the time of prescription
+
+***Note:*** Official Population Estimates have been used to calculate rates. These are available by year and SIMD Decile for all Scottish Health Board regions up to the year 2020.
+
+
+Column {data-width=600}
+-----------------------------------------------------------------------
+
+### **Cohort Summary**    *(2021 Data only available up to May)*
+
+```{r}
+tab1 <- mh_data$`Cohort by Year` %>%
+  left_join(pop_year, by = "year") %>% 
+  mutate(year = format(round(year, 1)),
+         per = format(round(per, 1)),
+         per_pop = format(round(prescriptions/pop_estimate, 1)),
+         prescriptions = format(round(prescriptions, 1), big.mark=","),
+         individuals = format(round(individuals, 1), big.mark=","),
+         pop_estimate = format(round(pop_estimate, 1), big.mark=","),
+         prescriptions_per_month = format(round(prescriptions_per_month, 1), big.mark=",")) %>%
+  select(year, prescriptions, individuals, per, pop_estimate, per_pop, prescriptions_per_month) %>% 
+  rename(Year = year,
+         Prescriptions = prescriptions,
+         Individuals = individuals,
+         'Individual Rate' = per,
+         'Population Estimate' = pop_estimate,
+         'Population Rate' = per_pop,
+         'Prescriptions per month' = prescriptions_per_month)
+
+renderTable(tab1, striped = TRUE, bordered = TRUE, align = "r")
+```
+
+### **Cohort Size Over Time** {data-height=600}
+
+```{r}
+plot1 <- mh_data$`Cohort by Year` %>%
+  filter(!(year == "2021")) %>% 
+  ggplot(aes(x = year, y = individuals)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  scale_y_continuous(name = "Individuals", limits = c(0,10500), breaks = seq(0, 10500, by = 1000), labels = scales::comma) +
+  scale_x_continuous(name = "Year", breaks = seq(2012,2021, by = 1)) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(caption = "Source: NHS Grampian PIS") 
+
+plot1 <- ggplotly(plot1)
+
+renderPlotly(plot1)
+```
+
+
+Column {data-width=400}
+-----------------------------------------------------------------------
+
+### **Summary Statistics by Prescription**
+
+```{r}
+tab2 <- mh_data$`Summary by Prescription`
+
+renderTable(tab2, na = "", striped = TRUE, bordered = TRUE, align = "r")
+```
+
+
+Total Prescriptions {data-orientation=rows}
+=======================================================================
+
+Sidebar {.sidebar data-width=350}
+-----------------------------------------------------------------------
+
+### **Top 20 Prescribed Items**
+
+The tables here depict the most prescribed items for the total cohort 2014-2021, as well as broken down for males and females.
+
+The numbers relate to instances of prescription, rather than people. That means that medications which are regularly prescribed to a small number of people may be higher in the list than medications prescribed to a large number of people only once or twice.
+
+Row {.tabset data-height=600}
+-----------------------------------------------------------------------
+
+### **Most Prescribed Items - Total**
+
+```{r}
+tab5 <- mh_data$`Top Scripts` %>% 
+  group_by(approved_name) %>% 
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  top_n(20) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, approved_name, n) %>% 
+  rename(Rank = rank,
+         Medication = approved_name,
+         Prescriptions = n) %>% 
+  mutate(Prescriptions = format(round(Prescriptions, 1), big.mark = ","))
+
+tab5 <- tab5 %>% 
+  left_join(mh_data$`Top Scripts`, by = c("Medication" = "approved_name")) %>%
+  filter(chi_sex == "F") %>% 
+  group_by(Medication) %>% 
+  top_n(1) %>% 
+  select(Rank, Medication, Prescriptions, bnf_section_name) %>% 
+  rename('BNF Section' = bnf_section_name)
+
+renderTable(tab5, striped = TRUE, bordered = TRUE, align = "l")
+```
+
+### **Males**
+
+```{r}
+tab6 <- mh_data$`Top Scripts` %>% 
+  group_by(chi_sex, approved_name) %>% 
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  filter(chi_sex == "M") %>%
+  select(!chi_sex) %>% 
+  arrange(desc(n)) %>% 
+  top_n(20) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, approved_name, n) %>% 
+  rename(Rank = rank,
+         Medication = approved_name,
+         Prescriptions = n) %>% 
+  mutate(Prescriptions = format(round(Prescriptions, 1), big.mark = ","))
+
+tab6 <- tab6 %>% 
+  left_join(mh_data$`Top Scripts`, by = c("Medication" = "approved_name")) %>%
+  filter(chi_sex == "F") %>% 
+  group_by(Medication) %>% 
+  top_n(1) %>% 
+  select(Rank, Medication, Prescriptions, bnf_section_name) %>% 
+  rename('BNF Section' = bnf_section_name)
+
+renderTable(tab6, striped = TRUE, bordered = TRUE, align = "l")
+```
+
+### **Females**
+
+```{r}
+tab7 <- mh_data$`Top Scripts` %>% 
+  group_by(chi_sex, approved_name) %>% 
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  filter(chi_sex == "F") %>%
+  select(!chi_sex) %>% 
+  arrange(desc(n)) %>% 
+  top_n(20) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, approved_name, n) %>% 
+  rename(Rank = rank,
+         Medication = approved_name,
+         Prescriptions = n) %>% 
+  mutate(Prescriptions = format(round(Prescriptions, 1), big.mark = ","))
+
+tab7 <- tab7 %>% 
+  left_join(mh_data$`Top Scripts`, by = c("Medication" = "approved_name")) %>%
+  filter(chi_sex == "F") %>% 
+  group_by(Medication) %>% 
+  top_n(1) %>% 
+  select(Rank, Medication, Prescriptions, bnf_section_name) %>% 
+  rename('BNF Section' = bnf_section_name)
+
+renderTable(tab7, striped = TRUE, bordered = TRUE, align = "l")
+```
+
+Row {data-height=400}
+-----------------------------------------------------------------------
+
+### **Most Prescribed Items by Section**
+
+```{r}
+plot6 <- mh_data$`Top Section` %>%
+  group_by(bnf_section_name) %>% 
+  summarise(prescriptions = sum(n)) %>%
+  mutate(bnf_section_name = fct_reorder(bnf_section_name, prescriptions)) %>% 
+  ggplot(aes(x = bnf_section_name, y = prescriptions, fill = bnf_section_name)) +
+  geom_bar(stat = "identity") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20)) +
+  scale_y_continuous(limits = c(0,300000), breaks = seq(0, 300000, by = 50000), labels = scales::comma) +
+  scale_fill_paletteer_d('rcartocolor::Bold') +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(y = "Prescriptions",
+       x = "",
+       caption = "Source: NHS Grampian PIS") +
+  coord_flip()
+
+plot6 <- ggplotly(plot6)
+
+renderPlotly(plot6)
+```
+
+
+Prescribed Individuals {data-orientation=rows}
+=======================================================================
+
+Sidebar {.sidebar data-width=350}
+-----------------------------------------------------------------------
+
+### **Top 20 Most Widely Prescribed Items**
+
+The tables here depict the most widely prescribed items for the total cohort 2014-2021, as well as broken down for males and females.
+
+The numbers relate to individuals who have received a prescription, rather than the total number of prescriptions. That means that an individuals could have been prescribed an item only once, or that they had many of the same prescription.
+
+Row {.tabset data-height=600}
+-----------------------------------------------------------------------
+
+### **Most Prescribed Items - Total**
+
+```{r}
+tab8 <- mh_data$`Top Scripts Wide` %>% 
+  group_by(approved_name) %>% 
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  top_n(20) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, approved_name, n) %>% 
+  rename(Rank = rank,
+         Medication = approved_name,
+         Individuals = n) %>% 
+  mutate(Individuals = format(round(Individuals, 1), big.mark = ","))
+
+tab8 <- tab8 %>% 
+  left_join(mh_data$`Top Scripts Wide`, by = c("Medication" = "approved_name")) %>%
+  filter(chi_sex == "F") %>% 
+  group_by(Medication) %>% 
+  top_n(1) %>% 
+  select(Rank, Medication, Individuals, bnf_section_name) %>% 
+  rename('BNF Chapter' = bnf_section_name)
+
+renderTable(tab8, striped = TRUE, bordered = TRUE, align = "l")
+```
+
+### **Males**
+
+```{r}
+tab9 <- mh_data$`Top Scripts Wide` %>% 
+  group_by(chi_sex, approved_name) %>% 
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  filter(chi_sex == "M") %>%
+  select(!chi_sex) %>% 
+  arrange(desc(n)) %>% 
+  top_n(20) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, approved_name, n) %>% 
+  rename(Rank = rank,
+         Medication = approved_name,
+         Individuals = n) %>% 
+  mutate(Individuals = format(round(Individuals, 1), big.mark = ","))
+
+tab9 <- tab9 %>% 
+  left_join(mh_data$`Top Scripts Wide`, by = c("Medication" = "approved_name")) %>%
+  filter(chi_sex == "M") %>% 
+  group_by(Medication) %>% 
+  top_n(1) %>% 
+  select(Rank, Medication, Individuals, bnf_section_name) %>% 
+  rename('BNF Chapter' = bnf_section_name)
+
+renderTable(tab9, striped = TRUE, bordered = TRUE, align = "l")
+```
+
+### **Females**
+
+```{r}
+tab10 <- mh_data$`Top Scripts Wide` %>% 
+  group_by(chi_sex, approved_name) %>% 
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  filter(chi_sex == "F") %>%
+  select(!chi_sex) %>% 
+  arrange(desc(n)) %>% 
+  top_n(20) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, approved_name, n) %>% 
+  rename(Rank = rank,
+         Medication = approved_name,
+         Individuals = n) %>% 
+  mutate(Individuals = format(round(Individuals, 1), big.mark = ","))
+
+tab10 <- tab10 %>% 
+  left_join(mh_data$`Top Scripts Wide`, by = c("Medication" = "approved_name")) %>%
+  filter(chi_sex == "F") %>% 
+  group_by(Medication) %>% 
+  top_n(1) %>% 
+  select(Rank, Medication, Individuals, bnf_section_name) %>% 
+  rename('BNF Chapter' = bnf_section_name)
+
+renderTable(tab10, striped = TRUE, bordered = TRUE, align = "l")
+```
+
+Row {data-height=400}
+-----------------------------------------------------------------------
+
+### **Widest Prescribed Items - Females**
+
+```{r}
+plot7.1 <- mh_data$`Top Scripts Wide` %>%
+  filter(chi_sex == "F") %>%
+  arrange(desc(n), .by_group = T) %>%
+  select(!bnf_section_name) %>% 
+  top_n(10) %>%
+  mutate(approved_name = fct_reorder(approved_name, n)) %>%
+  ggplot(aes(x = approved_name, y = n)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20)) +
+  scale_y_continuous(limits = c(0,8000), breaks = seq(0, 8000, by = 500), labels = scales::comma, guide = guide_axis(angle = 65)) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Female",
+       y = "Individuals",
+       x = "",
+       caption = "Source: NHS Grampian PIS") +
+  coord_flip()
+
+plot7.1 <- ggplotly(plot7.1)
+
+renderPlotly(plot7.1)
+```
+
+### **Widest Prescribed Items - Males**
+
+```{r}
+plot7.2 <- mh_data$`Top Scripts Wide` %>%
+  filter(chi_sex == "M") %>%
+  arrange(desc(n), .by_group = T) %>%
+  select(!bnf_section_name) %>% 
+  top_n(10) %>%
+  mutate(approved_name = fct_reorder(approved_name, n)) %>%
+  ggplot(aes(x = approved_name, y = n)) +
+  geom_bar(stat = "identity", fill = "springgreen4") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20)) +
+  scale_y_continuous(limits = c(0,8000), breaks = seq(0, 8000, by = 500), labels = scales::comma, guide = guide_axis(angle = 65)) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Male",
+       y = "Individuals",
+       x = "",
+       caption = "Source: NHS Grampian PIS") +
+  coord_flip()
+
+plot7.2 <- ggplotly(plot7.2)
+
+renderPlotly(plot7.2)
+```
+
+
+Deprivation {data-orientation=rows}
+=======================================================================
+
+Sidebar {.sidebar data-width=350}
+-----------------------------------------------------------------------
+
+### **Mental Health Prescription Rates in NHS Grampian have a Social Gradient by Deprivation**
+
+The Scottish Index of Multiple Deprivation (SIMD) is a relative measure of material deprivation. It breaks Scotland into 6,976 small areas with roughly the same population and ranks them based on scores in 7 domains of deprivation: income, employment, education, health, access to services, crime and housing.
+
+The SIMD is used by the Scottish Government and researchers to identify areas of multiple deprivation. Each area is ranked from 1 (Most Deprived) to 6,976 (Least Deprived). We've looked at these ranks in 10 groups, or deciles. Decile 1 includes areas which are in the most deprived 10% in Scotland.
+
+This data is for people living in small areas in the NHS Grampian region only. Deprivation is not evenly spread in this region - There are relatively fewer people living in the most deprived areas, and relatively more living in the least deprived areas.
+
+***Note:*** Deprivation is an area measure. Not every person living in a highly deprived area will experience a high level of deprivation themselves.
+
+
+Row {data-height=500}
+-----------------------------------------------------------------------
+
+### **Prescriptions by Deprivation**
+
+```{r}
+tab3 <- mh_data$`MH prescriptions by dep` %>%
+  left_join(dep_pop_avg, by = c("Deprivation" = "decile")) %>%
+  # Calculate
+  mutate('Population Rate' = format(round(Prescriptions/mean_pop, 1)),
+         pop_prop_est = Individuals/mean_pop,
+         prop_female = Females/Individuals) %>% 
+  # Format
+  mutate('Individual Rate' = format(round(individual_rate, 1)),
+         Prescriptions = format(round(Prescriptions, 1), big.mark=","),
+         Individuals = format(round(Individuals, 1), big.mark=","),
+         'Population Estimate (Mean)' = format(round(mean_pop, 1), big.mark=","),
+         Females = format(round(Females, 1), big.mark=","),
+         '% Female' = scales::percent(prop_female, accuracy = 0.1),
+         '% of Population Estimate' = scales::percent(pop_prop_est, accuracy = 0.1)) %>% 
+  # Order
+  select(Deprivation, Individuals, Prescriptions, 'Individual Rate', 'Population Estimate (Mean)', '% of Population Estimate', 'Population Rate', 'Median Age', 'IQR Age', Females, '% Female')
+
+renderTable(tab3, striped = TRUE, bordered = TRUE, align = "r")
+```
+
+Row {data-height=500}
+-----------------------------------------------------------------------
+
+### **Prescription Rate for those with a Prescription**
+
+```{r}
+abs_range <- paste("Absolute Range:",
+                   round(max(mean_totals$mean_rate) - min(mean_totals$mean_rate), digits = 2))
+rel_range <- paste("Relative Range:",
+                   round(max(mean_totals$mean_rate) / min(mean_totals$mean_rate), digits = 1))
+
+plot2 <- mean_totals %>% 
+  ggplot() +
+  geom_point(aes(x = decile, y = mean_rate), size = 2, colour = "dark blue") +
+  geom_smooth(method = "lm", aes(x = decile, y = mean_rate), se = FALSE, linetype = "dashed") +
+  geom_errorbar(aes(x = decile, ymin = mean_rate_lower, ymax = mean_rate_upper), width = 0.2, alpha = .5) +
+  scale_y_continuous(limits = c(0,1.4), breaks = seq(0,1.4,by=0.2)) + 
+  scale_x_continuous(breaks = seq(1,10,by = 9),
+                     labels = c("Most\nDeprived","Least\nDeprived")) +
+  theme_classic() +
+  theme(strip.background = element_blank()) +
+  labs(x = "",
+       y = "") +
+  ggtitle(paste0(abs_range,"\n",rel_range))
+
+plot2 <- ggplotly(plot2)
+
+renderPlotly(plot2)
+```
+
+### **Prescription Rate for total NHS Grampian Population**
+
+```{r}
+abs_range <- paste("Absolute Range:",
+                   round(max(mean_totals$mean_pop_rate) - min(mean_totals$mean_pop_rate), digits = 1))
+rel_range <- paste("Relative Range:",
+                   round(max(mean_totals$mean_pop_rate) / min(mean_totals$mean_pop_rate), digits = 1))
+
+
+plot3 <- mean_totals %>% 
+  ggplot() +
+  geom_point(aes(x = decile, y = mean_pop_rate), size = 2, colour = "dark red") +
+  geom_smooth(method = "lm", aes(x = decile, y = mean_pop_rate), se = FALSE, linetype = "dashed") +
+  geom_errorbar(aes(x = decile, ymin = mean_pop_rate_lower, ymax = mean_pop_rate_upper), width = 0.2, alpha = .5) +
+  scale_y_continuous(limits = c(0,.7), breaks = seq(0,.7, by = 0.1)) + 
+  scale_x_continuous(breaks = seq(1,10,by = 9),
+                     labels = c("Most\nDeprived","Least\nDeprived")) +
+  theme_classic() +
+  theme(strip.background = element_blank()) +
+  labs(x = "",
+       y = "") +
+  ggtitle(paste0(abs_range,"\n",rel_range))
+
+plot3 <- ggplotly(plot3)
+  
+renderPlotly(plot3)
+```
+
+
+Time Trends {data-orientation=rows}
+=======================================================================
+
+Sidebar {.sidebar data-width=350}
+-----------------------------------------------------------------------
+
+### **Medications 3: Mental Health Conditions**
+
+These plots shows the monthly (top) and annual (bottom right) rates of prescriptions (per 1,000 population) for medications commonly used to treat mental health needs.
+
+The bottom left plot also shows the total number of prescriptions for the whole period.
+
+Row {data-height=500}
+-----------------------------------------------------------------------
+
+### **Monthly Rate of Mental Health Prescriptions 2014-2020**
+
+```{r}
+plot8 <- pis_data$`MH drugs` %>% 
+  group_by(month_year, bnf_subsec_name) %>% 
+  summarise(total = sum(n)) %>%
+  ungroup() %>%
+  mutate(year = year(month_year)) %>%  
+  filter(!(year == "2021")) %>%
+  left_join(pop_year, by = "year") %>%
+  mutate(rate_per_k = (total/pop_estimate)*1000,
+         month_year = lubridate::as_date(month_year)) %>%
+  filter(!(bnf_subsec_name %in% c("Nicotine dependence", "Opioid dependence", "Drugs used for mania and hypomania", "Antipsychotic depot injections"))) %>% 
+  ggplot() +
+  geom_line(aes(x = month_year, y = rate_per_k, colour = fct_reorder(bnf_subsec_name, desc(rate_per_k))), size = 1) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+#  scale_y_continuous(limits = c(0,170), breaks = seq(0,160, by = 20)) +
+  theme_classic() +
+  scale_colour_paletteer_d('rcartocolor::Bold') +
+  labs(x = "Year",
+       y = "Prescriptions per 1,000 population") +
+  theme(legend.title = element_blank())
+
+plot8 <- ggplotly(plot8)
+
+renderPlotly(plot8)
+```
+
+Row {data-height=500}
+-----------------------------------------------------------------------
+
+### **Total Mental Health Prescriptions 2014-2021**
+
+```{r}
+plot9 <- pis_data$`MH drugs` %>% 
+  group_by(bnf_subsec_name) %>% 
+  summarise(total = sum(n)) %>% 
+  ungroup() %>%
+  mutate(bnf_subsec_name = fct_reorder(bnf_subsec_name, desc(total))) %>% 
+  filter(total >= 12000) %>%
+  ggplot(aes(x = bnf_subsec_name, y = total, fill = bnf_subsec_name)) +
+  geom_bar(stat = "identity") +
+  scale_fill_paletteer_d('rcartocolor::Bold') +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20)) +
+  scale_y_continuous(limits = c(0,180000), breaks = seq(0,180000, by = 20000), labels = scales::comma,
+                     guide = guide_axis(angle = 65)) +
+  theme_classic() +
+  labs(y = "Total Prescriptions",
+       x = "",
+       caption = "Source: NHS Grampian PIS") +
+  coord_flip() +
+  theme(legend.position = "none")
+
+plot9 <- ggplotly(plot9)
+
+renderPlotly(plot9)
+```
+
+
+### **Annual Rate of Mental Health Prescriptions 2014-2020**
+
+```{r}
+plot_ann <- pis_data$`MH drugs` %>% 
+  group_by(year, bnf_subsec_name) %>% 
+  summarise(total = sum(n)) %>%
+  ungroup() %>% 
+  filter(!(year == "2021")) %>%
+  left_join(pop_year, by = "year") %>%
+  mutate(rate_per_k = (total/pop_estimate)*1000) %>%
+  filter(rate_per_k > 10) %>%
+  filter(!(bnf_subsec_name == "Nicotine dependence")) %>% 
+  ggplot() +
+  geom_line(aes(x = year, y = rate_per_k, colour = fct_reorder(bnf_subsec_name, desc(rate_per_k))), size = 1) +
+  scale_x_continuous(breaks = seq(2014,2020, by = 1)) +
+  scale_y_continuous(limits = c(0,170), breaks = seq(0,160, by = 20)) +
+  theme_classic() +
+  scale_colour_paletteer_d('rcartocolor::Bold') +
+  labs(x = "",
+       y = "Prescriptions per 1,000 population") +
+  theme(legend.title = element_blank(),
+        legend.position = "none")
+
+plot_ann <- ggplotly(plot_ann)
+
+renderPlotly(plot_ann)
+```
+
+Maps {data-orientation=rows}
+=======================================================================
+
+Sidebar {.sidebar data-width=350}
+-----------------------------------------------------------------------
+
+### Geography
+
+**Areas with higher Deprivation have higher proportions of their populations with a Mental Health prescription**
+
+The Maps in the top panel show geographic patterns of deprivation and Mental Health prescriptions which takes into account differences in the size of populations within areas of deprivation.
+
+***Light Grey*** areas are those with lower deprivation and lower proportions with a mental health prescription.
+
+***Dark Blue*** areas are those with higher deprivation and higher proportions with a mental health prescription.
+
+***Light Blue*** areas have intermediate deprivation and proportions with a mental health prescription.
+
+The plots at the bottom show trends in this relationship over time.
+
+Row {.tabset data-height=600}
+-----------------------------------------------------------------------
+
+### Aberdeen City
+
+```{r}
+pal <- "DkBlue"
+
+map1 <- sf_nhsg %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Aberdeen City") %>%
+  ggplot() +
+  geom_sf(mapping = aes(fill = bi_clss), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = pal, dim = 3) +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  labs(caption = "Source: NHS Grampian PIS | NRS") +
+  theme_void() +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+map2 <- sf_nhsg %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Aberdeenshire") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = bi_clss), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = pal, dim = 3) +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+    labs(caption = "Source: NHS Grampian PIS | NRS") +
+  theme_void() +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+map3 <- sf_nhsg %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Moray") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = bi_clss), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = pal, dim = 3) +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+    labs(caption = "Source: NHS Grampian PIS | NRS") +
+  theme_void() +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+legend <- bi_legend(pal = pal, dim = 3, xlab = "Higher Relative Deprivation", ylab = "Higher % Population",  size = 10)
+
+city <- ggdraw() +
+  draw_plot(map1, 0,0,1,1) +
+  draw_plot(legend, 0.1,0.4,0.3,0.3)
+
+renderPlot(city)
+```
+
+### Aberdeenshire
+
+```{r}
+shire <- ggdraw() +
+  draw_plot(map2, 0,0,1,1) +
+  draw_plot(legend,0.1,0.4,.3,.3)
+
+renderPlot(shire)
+```
+
+### Moray
+
+```{r}
+moray <- ggdraw() +
+  draw_plot(map3, 0,0,1,1) +
+  draw_plot(legend,0.1,0.4,.3,.3)
+
+renderPlot(moray)
+```
+
+Row {.tabset data-height=400}
+-----------------------------------------------------------------------
+
+### Annual Proportions by Deprivation
+
+```{r}
+plot_city <- sf_nhsg %>% 
+  ggplot() +
+  geom_point(aes(x = smd_dcl, y = prop_pp), size = 2, colour = "dark red") +
+  geom_smooth(method = "lm", aes(x = smd_dcl, y = prop_pp), se = FALSE, linetype = "dashed") +
+  scale_y_continuous(limits = c(0,65)) +
+  scale_x_continuous(breaks = seq(1,10,by=9),
+                     labels = c("Most","Least")) +
+  facet_wrap(~year, nrow = 1) +
+  theme_classic() +
+  theme(strip.background = element_blank()) +
+  labs(x = "Area Deprivation",
+       y = "Proportion of Population w/ MH Prescription")
+
+renderPlot(plot_city)
+```
+
+
+
+```{r}
+### Annual Rates etc - NOT FOR DASHBOARD
+library(lemon)
+
+## Mean Individual Rates
+
+abs_range <- paste("Absolute Range:",
+                   round(max(mean_totals$mean_rate) - min(mean_totals$mean_rate), digits = 2))
+rel_range <- paste("Relative Range:",
+                   round(max(mean_totals$mean_rate) / min(mean_totals$mean_rate), digits = 1))
+
+plot_rates <- mean_totals %>% 
+  ggplot() +
+  geom_errorbar(aes(x = decile, ymin = mean_rate_lower, ymax = mean_rate_upper), width = 0.2, alpha = .5) +
+  geom_smooth(method = "lm", aes(x = decile, y = mean_rate), se = FALSE, linetype = "dashed") +
+  geom_point(aes(x = decile, y = mean_rate), size = 2, colour = "dark blue") +
+  scale_y_continuous(limits = c(0,1.4), breaks = seq(0,1.4,by=0.2)) + 
+  scale_x_continuous(breaks = seq(1,10,by = 9),
+                     labels = c("Most\nDeprived","Least\nDeprived")) +
+#  facet_rep_wrap(~year, nrow = 3, repeat.tick.labels = "bottom") +
+  theme_classic() +
+  theme(strip.background = element_blank()) +
+  labs(x = "",
+       y = "") +
+  ggtitle(paste0(abs_range,"\n",rel_range))
+#  theme(panel.spacing.x = unit(4, "mm"),
+#        axis.line = element_line())
+
+## Mean Pop Rate
+abs_range <- paste("Absolute Range:",
+                   round(max(mean_totals$mean_pop_rate) - min(mean_totals$mean_pop_rate), digits = 1))
+rel_range <- paste("Relative Range:",
+                   round(max(mean_totals$mean_pop_rate) / min(mean_totals$mean_pop_rate), digits = 1))
+
+
+plot_pop_rates <- mean_totals %>% 
+  ggplot() +
+  geom_errorbar(aes(x = decile, ymin = mean_pop_rate_lower, ymax = mean_pop_rate_upper), width = 0.2, alpha = .5) +
+  geom_smooth(method = "lm", aes(x = decile, y = mean_pop_rate), se = FALSE, linetype = "dashed") +
+  geom_point(aes(x = decile, y = mean_pop_rate), size = 2, colour = "dark red") +
+  scale_y_continuous(limits = c(0,.7), breaks = seq(0,.7, by = 0.1)) + 
+  scale_x_continuous(breaks = seq(1,10,by = 9),
+                     labels = c("Most\nDeprived","Least\nDeprived")) +
+#  facet_rep_wrap(~year, nrow = 3, repeat.tick.labels = "bottom") +
+  theme_classic() +
+  theme(strip.background = element_blank()) +
+  labs(x = "",
+       y = "") +
+  ggtitle(paste0(abs_range,"\n",rel_range))
+
+
+## Mean Proportions
+
+abs_range <- paste("Absolute Range:",
+                   round(max(mean_totals$mean_proportion)*100 - min(mean_totals$mean_proportion)*100, digits = 1))
+rel_range <- paste("Relative Range:",
+                   round(max(mean_totals$mean_proportion) / min(mean_totals$mean_proportion), digits = 1))
+
+plot_mean_props <- mean_totals %>% 
+  ggplot() +
+  geom_errorbar(aes(x = decile, ymin = mean_proportion_lower, ymax = mean_proportion_upper), width = .2, alpha = .5) +
+  geom_point(aes(x = decile, y = mean_proportion), size = 2, colour = "dark green") +
+  geom_smooth(method = "lm", aes(x = decile, y = mean_proportion), se = FALSE, linetype = "dashed") +
+  scale_y_continuous(limits = c(0,1), labels = scales::percent_format()) + 
+  scale_x_continuous(breaks = seq(1,10,by = 9),
+                     labels = c("Most\nDeprived","Least\nDeprived")) +
+  theme_classic() +
+  theme(strip.background = element_blank()) +
+  labs(x = "",
+       y = "") +
+  ggtitle(paste0(abs_range," Percentage Points","\n",rel_range))
+
+plots <- plot_grid(plot_rates, plot_pop_rates, plot_mean_props, labels = NULL, nrow = 1, scale = 0.95)
+
+ggsave("mean rates 2.png", plots, height = 5, width = 15, dpi = 500)
+
+## Plotting Ranges
+
+ranges <- annual_totals %>% 
+  filter(decile == 1 | decile == 10) %>% 
+  group_by(year) %>% 
+  summarise(rate_abs = rate[decile == 1] - rate[decile == 10],
+            rate_rel = rate[decile == 1] / rate[decile == 10],
+            pop_rate_abs = pop_rate[decile == 1] - pop_rate[decile == 10],
+            pop_rate_rel = pop_rate[decile == 1] / pop_rate[decile == 10],
+            prop_abs = proportion[decile == 1] - proportion[decile == 10],
+            prop_rel = proportion[decile == 1] / proportion[decile == 10])
+
+compare <- annual_totals %>% 
+  filter(decile == 1 | decile == 10) %>% 
+  group_by(decile) %>% 
+  summarise(mean_rate = mean(rate),
+            mean_rate_per_k = mean(rate_per_k),
+            mean_pop_rate = mean(pop_rate),
+            mean_pop_per_k = mean(pop_rate_per_k))
+
+lolli_plot <- compare %>% 
+  ggplot() +
+  geom_segment(aes(x = decile, xend = decile, y = mean_rate_per_k, yend = mean_pop_per_k), colour = "light grey") +
+  geom_point(aes(x = decile, y = mean_rate_per_k), colour = "light blue", size = 3) +
+  geom_point(aes(x = decile, y = mean_pop_per_k), colour = "red", size = 3) +
+  scale_x_discrete(breaks = c(1,10), labels = c("1"="Most Deprived","10"="Least Deprived")) +
+  coord_flip() +
+  theme_classic() +
+  theme(legend.position = "none")
+
+### Monthly Totals
+month_years <- tibble(month_year = seq(as_date("2014-01-01"), as_date("2021-05-01"), by = "month"))
+
+plot_monthly <- pis_data$`MH drugs` %>% 
+  group_by(month_year, bnf_section_name) %>% 
+  summarise(total = sum(n)) %>%
+  ungroup() %>%
+  full_join(month_years, by = "month_year") %>% 
+  mutate(year = year(month_year),
+         month_year = lubridate::as_date(month_year)) %>% 
+  ggplot() +
+  geom_line(aes(x = month_year, y = total, colour = fct_reorder(bnf_section_name, desc(total))), size = 1) +
+  geom_point(aes(x = month_year, y = total, colour = fct_reorder(bnf_section_name, desc(total))), size = 1) +
+  geom_vline(xintercept = as.numeric(as_date("2020-03-26")), colour = "dark red", linetype = "dashed") +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_y_continuous(labels = scales::comma, breaks = seq(0,4000,by=500)) +
+  theme_classic() +
+  scale_colour_paletteer_d('rcartocolor::Bold', na.translate = F) +
+  labs(x = "Year",
+       y = "Prescriptions") +
+  theme(legend.title = element_blank(),
+        legend.background = element_rect(colour = NA, fill = NA),
+        legend.position = c(.2,.85))
+
+plot_monthly
+
+ggsave("Pub/monthly_totals.png", height = 5.5, width = 9, plot_monthly, dpi = 500)
+```
+

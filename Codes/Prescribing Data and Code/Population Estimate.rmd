@@ -1,0 +1,98 @@
+---
+title: "Population Estimate"
+author: "Will Ball"
+date: "14/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Libraries
+
+```{r libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(data.table)
+library(here)
+```
+
+
+## Data
+
+National Records of Scotland annual Population Estimates for NHS Grampian Region (Aged 0-24) by Age and SIMD decile, 2012-2020.
+
+```{r data, message = FALSE, warning = FALSE}
+simd_pop <- read_csv("Data/Population SIMD/cleaned_pop_simd_2012-2020.csv") # Change location to your destination folder
+```
+
+
+## Manipulation
+
+```{r chunk 1, message = FALSE, warning = FALSE}
+# Annual Total Population 0-24
+pop_year <- simd_pop %>% 
+  group_by(year) %>% 
+  summarise(pop_estimate = sum(count))
+
+# Annual Total Population by IMD
+dep_pop_annual <- simd_pop %>%
+  group_by(year, decile) %>% 
+  summarise(pop_estimate = sum(count))
+
+# Average Annual Population by IMD for period 2012-2020
+dep_pop_avg <- dep_pop_annual %>% 
+#  filter(year >= 2015)                I have cut referrals data
+  group_by(decile) %>% 
+  summarise(mean_pop = round(mean(pop_estimate)))
+```
+
+#######
+## TEST
+#######
+
+```{r}
+library(viridis)
+
+plot <- simd_pop %>% 
+  mutate(decile = ordered(decile, seq(1,10,by=1)),
+         age_groups = case_when(
+           age <= 4             ~ "0-4",
+           age > 4 & age <= 9   ~ "5-9",
+           age > 9 & age <= 14  ~ "10-14",
+           age > 14 & age <= 19 ~ "15-19",
+           age > 19             ~ "20-24"),
+         age_groups = ordered(age_groups, levels = c("0-4","5-9","10-14","15-19","20-24"))) %>%
+  ggplot(aes(x = decile, y = count, fill = age_groups)) +
+  geom_bar(stat = "identity", position = position_fill(reverse = TRUE)) + 
+  facet_wrap(~year) +
+  scale_fill_viridis(discrete = T) +
+  theme_minimal()
+```
+
+```{r}
+pop_ages <- simd_pop %>% 
+  group_by(year, age) %>% 
+  summarise(total = sum(count))
+
+pop_ages_mean <- pop_ages %>% 
+  group_by(age) %>% 
+  summarise(mean_total = mean(total)) %>% 
+  ungroup() %>% 
+  mutate(age_group = case_when(
+           age <= 7             ~ "Pre-School & Lower Primary",
+           age > 7 & age <= 11  ~ "Upper Primary",
+           age > 11 & age <= 15 ~ "Lower Secondary",
+           age > 15 & age <= 18 ~ "Upper Secondary",
+           age > 18             ~ "School Leavers"
+  ))
+
+pop_age_groups_mean <- pop_ages_mean %>% 
+  group_by(age_group) %>% 
+  summarise(total = sum(mean_total)) %>% 
+  mutate(age_group = ordered(age_group,
+                              levels = c("Pre-School & Lower Primary","Upper Primary", "Lower Secondary",
+                                         "Upper Secondary", "School Leavers"))) %>% 
+  arrange(age_group)
+```

@@ -1,0 +1,136 @@
+quarter,school_ages,total_referrals,people
+2015-01-01,Pre-Schoolers,57,55
+2015-01-01,Lower Primary,107,106
+2015-01-01,Upper Primary,186,182
+2015-01-01,Lower Secondary,229,216
+2015-01-01,Upper Secondary,279,268
+2015-04-01,Pre-Schoolers,69,69
+2015-04-01,Lower Primary,129,128
+2015-04-01,Upper Primary,172,168
+2015-04-01,Lower Secondary,208,194
+2015-04-01,Upper Secondary,224,216
+2015-07-01,Pre-Schoolers,57,55
+2015-07-01,Lower Primary,91,88
+2015-07-01,Upper Primary,157,152
+2015-07-01,Lower Secondary,166,158
+2015-07-01,Upper Secondary,229,216
+2015-10-01,Pre-Schoolers,51,50
+2015-10-01,Lower Primary,109,108
+2015-10-01,Upper Primary,179,178
+2015-10-01,Lower Secondary,201,195
+2015-10-01,Upper Secondary,286,276
+2016-01-01,Pre-Schoolers,63,61
+2016-01-01,Lower Primary,105,105
+2016-01-01,Upper Primary,179,174
+2016-01-01,Lower Secondary,242,227
+2016-01-01,Upper Secondary,269,255
+2016-04-01,Pre-Schoolers,52,51
+2016-04-01,Lower Primary,108,107
+2016-04-01,Upper Primary,180,175
+2016-04-01,Lower Secondary,194,182
+2016-04-01,Upper Secondary,220,211
+2016-07-01,Pre-Schoolers,52,52
+2016-07-01,Lower Primary,87,87
+2016-07-01,Upper Primary,156,155
+2016-07-01,Lower Secondary,160,149
+2016-07-01,Upper Secondary,184,179
+2016-10-01,Pre-Schoolers,44,44
+2016-10-01,Lower Primary,117,117
+2016-10-01,Upper Primary,165,161
+2016-10-01,Lower Secondary,216,206
+2016-10-01,Upper Secondary,252,239
+2017-01-01,Pre-Schoolers,43,43
+2017-01-01,Lower Primary,112,110
+2017-01-01,Upper Primary,183,182
+2017-01-01,Lower Secondary,239,232
+2017-01-01,Upper Secondary,237,228
+2017-04-01,Pre-Schoolers,56,56
+2017-04-01,Lower Primary,98,98
+2017-04-01,Upper Primary,199,194
+2017-04-01,Lower Secondary,239,227
+2017-04-01,Upper Secondary,199,195
+2017-07-01,Pre-Schoolers,55,55
+2017-07-01,Lower Primary,90,87
+2017-07-01,Upper Primary,161,158
+2017-07-01,Lower Secondary,142,137
+2017-07-01,Upper Secondary,202,196
+2017-10-01,Pre-Schoolers,45,43
+2017-10-01,Lower Primary,110,106
+2017-10-01,Upper Primary,180,179
+2017-10-01,Lower Secondary,190,186
+2017-10-01,Upper Secondary,279,268
+2018-01-01,Pre-Schoolers,47,47
+2018-01-01,Lower Primary,95,94
+2018-01-01,Upper Primary,203,201
+2018-01-01,Lower Secondary,260,246
+2018-01-01,Upper Secondary,249,241
+2018-04-01,Pre-Schoolers,56,55
+2018-04-01,Lower Primary,116,114
+2018-04-01,Upper Primary,192,186
+2018-04-01,Lower Secondary,266,255
+2018-04-01,Upper Secondary,240,233
+2018-07-01,Pre-Schoolers,44,44
+2018-07-01,Lower Primary,84,82
+2018-07-01,Upper Primary,144,142
+2018-07-01,Lower Secondary,172,164
+2018-07-01,Upper Secondary,195,190
+2018-10-01,Pre-Schoolers,61,60
+2018-10-01,Lower Primary,103,102
+2018-10-01,Upper Primary,172,167
+2018-10-01,Lower Secondary,287,280
+2018-10-01,Upper Secondary,279,273
+2019-01-01,Pre-Schoolers,48,48
+2019-01-01,Lower Primary,111,110
+2019-01-01,Upper Primary,219,215
+2019-01-01,Lower Secondary,256,245
+2019-01-01,Upper Secondary,248,241
+2019-04-01,Pre-Schoolers,34,32
+2019-04-01,Lower Primary,99,98
+2019-04-01,Upper Primary,226,220
+2019-04-01,Lower Secondary,266,257
+2019-04-01,Upper Secondary,203,201
+2019-07-01,Pre-Schoolers,23,23
+2019-07-01,Lower Primary,90,88
+2019-07-01,Upper Primary,180,175
+2019-07-01,Lower Secondary,197,191
+2019-07-01,Upper Secondary,239,236
+2019-10-01,Pre-Schoolers,20,20
+2019-10-01,Lower Primary,113,110
+2019-10-01,Upper Primary,229,218
+2019-10-01,Lower Secondary,234,229
+2019-10-01,Upper Secondary,294,287
+2020-01-01,Pre-Schoolers,19,18
+2020-01-01,Lower Primary,90,90
+2020-01-01,Upper Primary,206,201
+2020-01-01,Lower Secondary,250,247
+2020-01-01,Upper Secondary,269,262
+2020-04-01,Pre-Schoolers,10,10
+2020-04-01,Lower Primary,52,52
+2020-04-01,Upper Primary,100,100
+2020-04-01,Lower Secondary,99,97
+2020-04-01,Upper Secondary,133,133
+2020-07-01,Pre-Schoolers,20,20
+2020-07-01,Lower Primary,80,79
+2020-07-01,Upper Primary,182,176
+2020-07-01,Lower Secondary,252,248
+2020-07-01,Upper Secondary,254,249
+2020-10-01,Pre-Schoolers,19,19
+2020-10-01,Lower Primary,88,82
+2020-10-01,Upper Primary,226,217
+2020-10-01,Lower Secondary,328,318
+2020-10-01,Upper Secondary,367,346
+2021-01-01,Pre-Schoolers,10,10
+2021-01-01,Lower Primary,106,99
+2021-01-01,Upper Primary,220,206
+2021-01-01,Lower Secondary,209,202
+2021-01-01,Upper Secondary,246,236
+2021-04-01,Pre-Schoolers,21,18
+2021-04-01,Lower Primary,107,96
+2021-04-01,Upper Primary,248,240
+2021-04-01,Lower Secondary,354,339
+2021-04-01,Upper Secondary,366,338
+2021-07-01,Pre-Schoolers,18,18
+2021-07-01,Lower Primary,71,69
+2021-07-01,Upper Primary,167,161
+2021-07-01,Lower Secondary,280,270
+2021-07-01,Upper Secondary,278,262

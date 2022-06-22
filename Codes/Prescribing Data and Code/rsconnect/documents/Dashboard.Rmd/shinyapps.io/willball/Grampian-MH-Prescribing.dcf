@@ -1,0 +1,14 @@
+name: Grampian-MH-Prescribing
+title: Grampian-MH-Prescribing
+username:
+account: willball
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4869409
+bundleId: 5244589
+url: https://willball.shinyapps.io/Grampian-MH-Prescribing/
+when: 1636729565.7416
+lastSyncTime: 1636729565.7416
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: mean rates 2.png

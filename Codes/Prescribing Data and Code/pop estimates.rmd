@@ -1,0 +1,29 @@
+---
+title: "Cleaning up SIMD Pop Estimates"
+author: "Will Ball"
+date: "28/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(vroom)
+library(tidyverse)
+library(lattice)
+library(latticeExtra)
+```
+
+## Data
+
+```{r cars}
+simd_pop <- vroom("~/Data/MH PIS Dashboard/Data/Population SIMD/scotland_pop_estimate_2020.csv", delim = ",") %>% 
+  pivot_longer(!c(health_board, simd2020_decile, sex, all_ages), names_to = "age", values_to = "count") %>% 
+  mutate(simd2020_decile = ordered(simd2020_decile, levels = seq(from = 1, to = 10, by = 1)),
+         age = as.numeric(age)) %>% 
+  group_by(simd2020_decile, age) %>%
+  summarise(pop_est = sum(count))
+  
+
+# write_delim(simd_pop, "Data/Population SIMD/cleaned_pop_simd_2012-2020.csv", delim = ",")
+```

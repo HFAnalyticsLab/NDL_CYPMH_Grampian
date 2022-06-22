@@ -1,0 +1,217 @@
+---
+title: "Mapping"
+author: "Will Ball"
+date: "12/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(rio)
+library(curl)
+library(sf)
+library(rmapshaper)
+library(httr)
+library(jsonlite)
+library(viridis)
+library(readxl)
+library(biscale)
+library(cowplot)
+```
+
+# Data
+
+```{r}
+simd_pop <- import("Data/Population SIMD/cleaned_pop_simd_2012-2020.csv", delim = ",")
+
+# Download data zone boundaries
+temp_1 <- tempfile()
+temp_2 <- tempfile()
+source <- "https://maps.gov.scot/ATOM/shapefiles/SG_DataZoneBdry_2011.zip"
+temp_1 <- curl_download(url = source, destfile = temp_1, quiet = FALSE)
+unzip(temp_1, exdir = temp_2)
+sf_Scot <- read_sf(file.path(temp_2,"SG_DataZone_Bdry_2011.shp"))
+sf_Scot <- ms_simplify(sf_Scot) %>%
+  clean_names()
+
+# Set CRS
+sf_Scot <- st_transform(sf_Scot, crs = "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +datum=OSGB36 +units=m +no_defs")
+
+# Download lookup for Health Board
+lookupScot <- read_csv("https://www.opendata.nhs.scot/dataset/9f942fdb-e59e-44f5-b534-d6e17229cc7b/resource/395476ab-0720-4740-be07-ff4467141352/download/dz2011_codes_and_labels_21042020.csv") %>%
+  clean_names() %>% 
+  select(data_zone, hb_name, ca_name, hscp_name)
+
+# Join lookup
+sf_Scot <- sf_Scot %>% 
+  left_join(lookupScot, by = "data_zone")
+
+# Download SIMD2020 deciles
+simd2020 <- read_csv("https://www.opendata.nhs.scot/dataset/78d41fa9-1a62-4f7b-9edb-3e8522a93378/resource/acade396-8430-4b34-895a-b3e757fa346e/download/simd2020v2_22062020.csv") %>% 
+  clean_names() %>% 
+  select(data_zone, simd2020v2country_decile) %>% 
+  rename(simd_decile = simd2020v2country_decile)
+
+# Join SIMD2020
+sf_Scot <- sf_Scot %>% 
+  left_join(simd2020, by = "data_zone")
+
+# Cut down for NHS Grampian
+grampian <- sf_Scot %>%
+  filter(hb_name == "NHS Grampian")
+
+# Load individuals for quintiles by year
+simd_pop_year <- simd_pop %>% 
+  group_by(year, decile) %>% 
+  summarise(pop_est = sum(count))
+
+imd_quintiles_year <- mh_data$`Annual Individuals by year` %>%
+  filter(year < 2021) %>% 
+  group_by(simd2020_decile, year) %>%
+  summarise(n = sum(n)) %>% 
+  mutate(simd2020_decile = as.numeric(ordered(simd2020_decile, levels = c("1 - Most","2","3","4","5","6","7","8","9","10 - Least"),
+                                                     labels = c("1","2","3","4","5","6","7","8","9","10")))) %>% 
+  left_join(simd_pop_year, by = c("year", "simd2020_decile" = "decile")) %>% 
+  mutate(prop_pop = (n / pop_est)*100)
+
+# Join
+grampian <- grampian %>% 
+  left_join(imd_quintiles_year, by = c("simd_decile" = "simd2020_decile"))
+
+# Create Classes
+data <- grampian %>% 
+  mutate(simd_decile_rev = recode(simd_decile, '1'='10','2'='9','3'='8','4'='7','5'='6','6'='5','7'='4','8'='3','9'='2','10'='1'),
+         simd_decile_rev = as.numeric(simd_decile_rev)) %>% 
+  bi_class(x = simd_decile_rev, y = prop_pop, style = "quantile", dim = 3) %>% 
+  select(data_zone, name, bi_class, simd_decile_rev, simd_decile, prop_pop, ca_name, hscp_name, year, n, pop_est)
+
+# Save
+write_sf(data, "Data/Shapefile/NHSG_bivariate.shp")
+```
+
+# Map
+
+```{r}
+map1 <- data %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Aberdeen City") %>%
+  ggplot() +
+  geom_sf(mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkBlue", dim = 3) +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  theme_void() +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+map2 <- data %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Aberdeenshire") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkBlue", dim = 3) +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  theme_void() +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+map3 <- data %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Moray") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkBlue", dim = 3) +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  theme_void() +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+legend <- bi_legend(pal = "DkBlue", dim = 3, xlab = "Higher Pop Prop", ylab = "Higher SIMD", size = 8)
+
+city <- ggdraw() +
+  draw_plot(map1, 0,0,1,1) +
+  draw_plot(legend, 0.1,0.55,0.25,0.25)
+city
+
+shire <- ggdraw() +
+  draw_plot(map2, 0,0,1,1) +
+  draw_plot(legend,0,0,.2,.2)
+shire
+
+moray <- ggdraw() +
+  draw_plot(map3, 0,0,1,1) +
+  draw_plot(legend,0,0,.2,.2)
+moray
+```
+
+```{r}
+dep_map_city <- data %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Aberdeen City") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = simd_decile), color = "white", size = 0.1, show.legend = FALSE) +
+  scale_fill_viridis() +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  theme_void() +
+  labs(title = "Aberdeen City") +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+dep_map_shire <- data %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Aberdeenshire") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = simd_decile), color = "white", size = 0.1, show.legend = FALSE) +
+  scale_fill_viridis() +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  theme_void() +
+  labs(title = "Aberdeenshire") +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+dep_map_moray <- data %>% 
+  filter(year == "2020") %>%
+  filter(ca_name == "Moray") %>% 
+  ggplot() +
+  geom_sf(mapping = aes(fill = simd_decile), color = "white", size = 0.1, show.legend = FALSE) +
+  scale_fill_viridis() +
+  coord_sf(crs = st_crs(4326), datum = NA) +
+  theme_void() +
+  labs(title = "Moray") +
+  theme(plot.margin = unit(c(1,1,1,1), "cm"),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.caption = element_text(size = 9, color = "grey50", hjust = 1, margin = margin(t = 15)))
+
+dep_maps <- plot_grid(dep_map_city, dep_map_shire, dep_map_moray, nrow = 1)
+
+dep_map_prop <- data %>% 
+  group_by(simd_decile) %>% 
+  summarise(total = n()) %>% 
+  mutate(proportion = total/sum(total),
+         simd_decile = ordered(simd_decile, levels = seq(1,10,by=1)),
+         dummy = "dummy") %>%
+  ggplot() +
+  geom_bar(aes(x= dummy, y = proportion, fill = simd_decile), position = "fill") +
+  geom_text(aes(x = dummy, label = paste0(proportion*100, "%")), position = position_stack(0.5)) +
+  scale_y_continuous(breaks = seq(0,1, by = 1), labels = c("Least Deprived", "Most Deprived")) +
+  scale_fill_viridis(discrete = T) +
+  theme_classic() +
+  labs(x = "", y = "", title = "Proportional Deprivation Distribution in NHS Grampian") +
+  coord_flip() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        legend.position = "none")
+
+dep_maps1 <- plot_grid(dep_maps, dep_map_prop, ncol = 1, rel_heights = c(1,0.25))
+```
